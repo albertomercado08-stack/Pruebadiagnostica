@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Caza Procesal Constitucional - Ley 0254 y 027</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Fuentes: Retro para el juego, Lora para los textos legales -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Lora:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'arcade-blue': '#3b82f6',
+                        'arcade-green': '#4ade80',
+                        'law-gold': '#d4af37',
+                    },
+                    fontFamily: {
+                        'retro': ['"Press Start 2P"', 'cursive'],
+                        'law': ['"Lora"', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #111827;
+            color: white;
+            touch-action: none; /* Evita scroll en móviles al jugar */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            height: 80vh;
+            max-height: 650px;
+            background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
+            border: 4px solid #1f2937;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(79, 172, 254, 0.5), inset 0 0 20px rgba(0,0,0,0.3);
+            overflow: hidden;
+            /* Cursor de mira para sensación de disparo */
+            cursor: crosshair; 
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .hud-panel {
+            position: absolute;
+            background: rgba(17, 24, 39, 0.95);
+            border: 3px solid #d4af37;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+
+        /* Bloque de Preguntas inferior */
+        #questionBlock {
+            bottom: 20px;
+            left: 5%;
+            width: 90%;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .fade-in { animation: fadeIn 0.4s ease forwards; }
+        .hidden { display: none !important; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .btn-retro {
+            background: #d4af37;
+            color: #111827;
+            border: 4px solid #fef08a;
+            box-shadow: inset -4px -4px 0 rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        .btn-retro:active {
+            transform: scale(0.95);
+        }
+
+        /* Pantallazo blanco al disparar */
+        #flash {
+            position: absolute;
+            inset: 0;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.05s;
+            z-index: 10;
+        }
+        .is-flashing { opacity: 1 !important; }
+
+        /* Letreros de acierto/error */
+        .stamp {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 3rem;
+            font-family: 'Press Start 2P', cursive;
+            text-shadow: 4px 4px 0 #000;
+            pointer-events: none;
+            z-index: 20;
+            text-align: center;
+            line-height: 1.5;
+        }
+        .stamp-animate {
+            animation: stampIn 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes stampIn {
+            0% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+            20% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="font-law p-2">
+
+    <header class="mb-4 text-center">
+        <h1 class="text-2xl md:text-3xl font-retro text-law-gold tracking-widest drop-shadow-md">
+            CAZA PROCESAL
+        </h1>
+        <p class="text-gray-400 italic">Ley 0254 y Ley 027 (Tribunal Constitucional)</p>
+    </header>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="flash"></div>
+
+        <!-- PANTALLA DE INICIO -->
+        <div id="startScreen" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-30 fade-in">
+            <div class="bg-gray-900 border-4 border-law-gold p-8 text-center max-w-lg mx-4">
+                <i class="fa-solid fa-crosshairs text-6xl text-law-gold mb-6 animate-pulse"></i>
+                <h2 class="text-2xl font-retro text-white mb-6 leading-relaxed">Caza Constitucional</h2>
+                <p class="text-gray-300 mb-8 font-law text-lg">
+                    Aparecerán 3 patos numerados.<br>
+                    Lee la pregunta procesal en la parte inferior y <strong>dispara al pato con el número de la respuesta correcta.</strong>
+                </p>
+                <button id="btnStart" class="btn-retro font-retro text-sm py-4 px-6 uppercase w-full">
+                    <i class="fa-solid fa-play mr-2"></i> INICIAR CAZA
+                </button>
+            </div>
+        </div>
+
+        <!-- MARCADOR SUPERIOR -->
+        <div id="scoreBoard" class="absolute top-4 left-4 right-4 flex justify-between font-retro text-xs md:text-sm text-white drop-shadow-[2px_2px_0_rgba(0,0,0,1)] z-10 hidden">
+            <div class="flex items-center space-x-2">
+                <span class="text-law-gold">EXPEDIENTE:</span>
+                <span id="scoreText">0/5</span>
+            </div>
+            <div class="flex space-x-1" id="livesBox">
+                <i class="fa-solid fa-gavel text-red-500 text-xl"></i>
+                <i class="fa-solid fa-gavel text-red-500 text-xl"></i>
+                <i class="fa-solid fa-gavel text-red-500 text-xl"></i>
+            </div>
+        </div>
+
+        <!-- BLOQUE ÚNICO DE PREGUNTA Y RESPUESTAS -->
+        <div id="questionBlock" class="hud-panel z-10 hidden flex-col">
+            <h3 id="qText" class="text-white font-bold text-lg md:text-xl font-law mb-4 text-center border-b border-gray-600 pb-2">
+                ¿Pregunta?
+            </h3>
+            <div class="flex flex-col md:flex-row justify-center gap-4 text-sm md:text-base font-law text-gray-200">
+                <div class="flex-1 bg-gray-800/80 p-2 rounded border border-gray-600 flex items-center">
+                    <span class="font-retro text-law-gold mr-3 text-lg drop-shadow-md">1</span>
+                    <span id="opt1">Opción 1</span>
+                </div>
+                <div class="flex-1 bg-gray-800/80 p-2 rounded border border-gray-600 flex items-center">
+                    <span class="font-retro text-law-gold mr-3 text-lg drop-shadow-md">2</span>
+                    <span id="opt2">Opción 2</span>
+                </div>
+                <div class="flex-1 bg-gray-800/80 p-2 rounded border border-gray-600 flex items-center">
+                    <span class="font-retro text-law-gold mr-3 text-lg drop-shadow-md">3</span>
+                    <span id="opt3">Opción 3</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SELLOS (Retroalimentación visual) -->
+        <div id="stampSuccess" class="stamp text-green-400">RECURSO<br>FUNDADO!</div>
+        <div id="stampFail" class="stamp text-red-500">OBJECIÓN<br>DENEGADA!</div>
+
+        <!-- PANTALLA FIN DEL JUEGO -->
+        <div id="gameOverScreen" class="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-40 hidden text-center px-4">
+            <h2 class="text-3xl font-retro text-red-500 mb-6 leading-relaxed">PROCESO<br>NULO</h2>
+            <p class="text-gray-300 mb-8 font-law text-lg max-w-md">Has fallado 3 veces. Repasa el Código Procesal Constitucional e inténtalo de nuevo.</p>
+            <button id="btnRestart" class="btn-retro font-retro text-sm py-4 px-6 uppercase">
+                APELAR (REINTENTAR)
+            </button>
+        </div>
+
+        <!-- PANTALLA VICTORIA -->
+        <div id="victoryScreen" class="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-40 hidden text-center px-4">
+            <h2 class="text-3xl font-retro text-law-gold mb-6 leading-relaxed">¡MAGISTRADO<br>SUPREMO!</h2>
+            <p class="text-gray-300 mb-8 font-law text-lg max-w-md">Dominas perfectamente la Ley 0254 y la estructura del TCP (Ley 027).</p>
+            <button id="btnVictory" class="btn-retro font-retro text-sm py-4 px-6 uppercase">
+                CERRAR CASO
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const questions = [
+            {
+                q: "¿Cuál es la sede de las funciones del Tribunal Constitucional Plurinacional (Ley 027)?",
+                opts: ["La Paz", "Cochabamba", "Sucre"],
+                ans: 3 // Pato 3
+            },
+            {
+                q: "Según el CPCo (Ley 254), ¿Qué acción tutela el derecho a la vida y la libertad física?",
+                opts: ["Acción de Libertad", "Acción de Amparo", "Acción Popular"],
+                ans: 1 // Pato 1
+            },
+            {
+                q: "¿Cuántos Magistrados TITULARES conforman la Sala Plena del TCP?",
+                opts: ["Nueve (9)", "Siete (7)", "Doce (12)"],
+                ans: 1 // Pato 1
+            },
+            {
+                q: "¿Qué Acción de Defensa protege los derechos colectivos y el medio ambiente (Ley 254)?",
+                opts: ["Habeas Data", "Acción Popular", "Acción de Cumplimiento"],
+                ans: 2 // Pato 2
+            },
+            {
+                q: "Contra las sentencias dictadas por el TCP en Acciones de Defensa...",
+                opts: ["Procede Recurso de Casación", "No cabe recurso ulterior alguno", "Se apela ante la Asamblea"],
+                ans: 2 // Pato 2
+            }
+        ];
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+
+        const UI = {
+            start: document.getElementById('startScreen'),
+            gameover: document.getElementById('gameOverScreen'),
+            victory: document.getElementById('victoryScreen'),
+            scoreboard: document.getElementById('scoreBoard'),
+            qBlock: document.getElementById('questionBlock'),
+            qText: document.getElementById('qText'),
+            o1: document.getElementById('opt1'),
+            o2: document.getElementById('opt2'),
+            o3: document.getElementById('opt3'),
+            score: document.getElementById('scoreText'),
+            lives: document.getElementById('livesBox'),
+            flash: document.getElementById('flash'),
+            stampS: document.getElementById('stampSuccess'),
+            stampF: document.getElementById('stampFail')
+        };
+
+        let w, h;
+        let gameState = 'MENU'; // MENU, PLAYING, RESULT
+        let currentQ = 0;
+        let lives = 3;
+        let ducks = [];
+        let particles = [];
+        let grassHeight = 100;
+        
+        function resize() {
+            w = container.clientWidth;
+            h = container.clientHeight;
+            canvas.width = w;
+            canvas.height = h;
+            grassHeight = h * 0.2; // 20% de la pantalla es pasto
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        let isAudioInit = false;
+        let bgmLoop, shootSynth, hitSynth, failSynth, winSynth;
+
+        async function initAudio() {
+            if (isAudioInit) return;
+            await Tone.start();
+            
+            // Sonido de disparo (Ruido blanco + Envolvente percusiva)
+            shootSynth = new Tone.NoiseSynth({
+                noise: { type: "white" },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 },
+                volume: 5
+            }).toDestination();
+
+            // Acierto (Arpegio de Mario/Arcade)
+            hitSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 },
+                volume: -5
+            }).toDestination();
+
+            // Música de Burla (Wah-wah-wah-waaah)
+            failSynth = new Tone.Synth({
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.05, decay: 0.3, sustain: 0.8, release: 1 },
+                volume: 2
+            }).toDestination();
+
+            // Música de fondo (Bajo retro simple)
+            const bgmSynth = new Tone.FMSynth({
+                harmonicity: 2, modulationIndex: 3,
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.1 },
+                volume: -15
+            }).toDestination();
+
+            const notes = ["C3", "Eb3", "G3", "Eb3"];
+            let idx = 0;
+            bgmLoop = new Tone.Loop(time => {
+                bgmSynth.triggerAttackRelease(notes[idx % notes.length], "8n", time);
+                idx++;
+            }, "4n");
+            
+            Tone.Transport.bpm.value = 140;
+            isAudioInit = true;
+        }
+
+        function playShoot() {
+            if (shootSynth) shootSynth.triggerAttackRelease("16n");
+        }
+
+        function playHit() {
+            if (!hitSynth) return;
+            const now = Tone.now();
+            hitSynth.triggerAttackRelease("C5", "16n", now);
+            hitSynth.triggerAttackRelease("E5", "16n", now + 0.1);
+            hitSynth.triggerAttackRelease("G5", "8n", now + 0.2);
+        }
+
+        function playFailMock() {
+            if (!failSynth) return;
+            // Tonos descendentes típicos de pérdida
+            const now = Tone.now();
+            failSynth.triggerAttackRelease("Eb3", "4n", now);
+            failSynth.triggerAttackRelease("D3", "4n", now + 0.35);
+            failSynth.triggerAttackRelease("Db3", "4n", now + 0.7);
+            failSynth.triggerAttackRelease("C3", "1n", now + 1.05);
+        }
+
+        function playWin() {
+            if (!hitSynth) return;
+            const now = Tone.now();
+            hitSynth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n", now);
+        }
+
+
+        class Duck {
+            constructor(number) {
+                this.number = number;
+                this.radius = 35; // Área de impacto
+                this.x = (w / 4) * number; 
+                this.y = h - grassHeight; // Nace del pasto
+                this.vx = (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random() * 2);
+                this.vy = -(3 + Math.random() * 3); // Vuela hacia arriba
+                this.state = 'FLYING'; // FLYING, FALLING, DEAD
+                this.frame = 0; // Animación de alas
+            }
+
+            update() {
+                if (this.state === 'FLYING') {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.frame += 0.2;
+
+                    // Rebotes en los bordes de la pantalla
+                    if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -1; }
+                    if (this.x + this.radius > w) { this.x = w - this.radius; this.vx *= -1; }
+                    
+                    // Si llega muy arriba, baja suavemente o rebota
+                    if (this.y - this.radius < 0) {
+                        this.y = this.radius;
+                        this.vy = Math.abs(this.vy); // forzar hacia abajo
+                    }
+                    
+                    // No dejar que baje más allá del HUD de preguntas
+                    const ceiling = h - 200; // Aproximadamente donde empieza el HUD
+                    if (this.y > ceiling && this.vy > 0) {
+                        this.vy = -Math.abs(this.vy);
+                    }
+                } else if (this.state === 'FALLING') {
+                    this.y += 8; // Gravedad rápida
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                if (this.state === 'FALLING') {
+                    ctx.scale(1, -1); // Voltear al caer
+                }
+
+                // Cuerpo del pato (Estilo simple retro)
+                ctx.fillStyle = '#fbbf24'; // Amarillo/Naranja
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 30, 20, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Cabeza
+                ctx.beginPath();
+                const dir = this.vx > 0 ? 1 : -1;
+                ctx.ellipse(dir * 20, -15, 15, 15, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ojo
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(dir * 25, -20, 3, 0, Math.PI*2);
+                ctx.fill();
+
+                // Pico
+                ctx.fillStyle = '#ea580c';
+                ctx.beginPath();
+                ctx.ellipse(dir * 35, -12, 10, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Alas (Animadas)
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                if (this.state === 'FLYING') {
+                    const wingFlap = Math.sin(this.frame) * 15;
+                    ctx.ellipse(-dir * 5, wingFlap, 15, 8, 0, 0, Math.PI * 2);
+                } else {
+                    ctx.ellipse(-dir * 5, 0, 15, 8, 0, 0, Math.PI * 2);
+                }
+                ctx.fill();
+
+                // Círculo blanco para el número
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(0, 0, 14, 0, Math.PI*2);
+                ctx.fill();
+
+                // NÚMERO
+                ctx.fillStyle = '#111827';
+                ctx.font = '16px "Press Start 2P"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // Pequeño ajuste visual para la fuente pixelada
+                ctx.fillText(this.number, 1, 2);
+
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y;
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.life = 1;
+                this.color = color;
+                this.size = Math.random() * 6 + 3;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= 0.03;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+
+        function createExplosion(x, y, isWin) {
+            const colors = isWin ? ['#fbbf24', '#ffffff', '#ea580c'] : ['#ef4444', '#7f1d1d'];
+            for(let i=0; i<30; i++) {
+                particles.push(new Particle(x, y, colors[Math.floor(Math.random()*colors.length)]));
+            }
+        }
+
+        function drawEnvironment() {
+            // Cielo está manejado por CSS background
+            
+            // Nubes simples (Parallax falso)
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            const time = performance.now() * 0.02;
+            ctx.beginPath();
+            ctx.arc((time * 0.5) % w, h * 0.2, 40, 0, Math.PI*2);
+            ctx.arc(((time * 0.5) % w) + 40, h * 0.2, 50, 0, Math.PI*2);
+            ctx.arc(((time * 0.5) % w) + 80, h * 0.2 + 10, 40, 0, Math.PI*2);
+            ctx.fill();
+
+            // Montañas lejanas/Edificio TCP abstracto
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.moveTo(w*0.2, h - grassHeight);
+            ctx.lineTo(w*0.4, h - grassHeight - 150);
+            ctx.lineTo(w*0.5, h - grassHeight - 150);
+            ctx.lineTo(w*0.7, h - grassHeight);
+            ctx.fill();
+            
+            // Columnas del edificio abstracto
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(w*0.41, h - grassHeight - 140, 10, 140);
+            ctx.fillRect(w*0.45, h - grassHeight - 140, 10, 140);
+            ctx.fillRect(w*0.49, h - grassHeight - 140, 10, 140);
+
+            // Pastizal frontal
+            ctx.fillStyle = '#15803d'; // Verde
+            ctx.fillRect(0, h - grassHeight, w, grassHeight);
+            ctx.fillStyle = '#166534'; // Verde oscuro top
+            ctx.fillRect(0, h - grassHeight, w, 15);
+        }
+
+        function updateHUD() {
+            UI.score.innerText = `${currentQ}/${questions.length}`;
+            let lHtml = '';
+            for(let i=0; i<3; i++) {
+                if(i < lives) lHtml += '<i class="fa-solid fa-gavel text-law-gold text-xl mx-1 drop-shadow"></i>';
+                else lHtml += '<i class="fa-solid fa-gavel text-gray-700 text-xl mx-1"></i>';
+            }
+            UI.lives.innerHTML = lHtml;
+        }
+
+        function spawnQuestion() {
+            if (currentQ >= questions.length) {
+                winGame();
+                return;
+            }
+
+            const q = questions[currentQ];
+            UI.qText.innerText = q.q;
+            UI.o1.innerText = q.opts[0];
+            UI.o2.innerText = q.opts[1];
+            UI.o3.innerText = q.opts[2];
+
+            UI.qBlock.classList.remove('hidden');
+            UI.qBlock.classList.add('fade-in');
+
+            ducks = [new Duck(1), new Duck(2), new Duck(3)];
+            gameState = 'PLAYING';
+            updateHUD();
+        }
+
+        function handleShot(e) {
+            if (gameState !== 'PLAYING') return;
+
+            playShoot();
+
+            // Efecto de flash visual
+            UI.flash.classList.add('is-flashing');
+            setTimeout(() => UI.flash.classList.remove('is-flashing'), 50);
+
+            // Obtener coordenadas reales relativas al canvas
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            
+            if (clientX === undefined) return;
+
+            const clickX = clientX - rect.left;
+            const clickY = clientY - rect.top;
+
+            let hitDuck = null;
+
+            // Revisar colisión inversa (para golpear al pato que esté más al frente)
+            for (let i = ducks.length - 1; i >= 0; i--) {
+                let d = ducks[i];
+                if (d.state !== 'FLYING') continue;
+                
+                const dist = Math.hypot(d.x - clickX, d.y - clickY);
+                if (dist < d.radius * 1.5) { // Área de hit generosa
+                    hitDuck = d;
+                    break;
+                }
+            }
+
+            if (hitDuck) {
+                const q = questions[currentQ];
+                if (hitDuck.number === q.ans) {
+                    // CORRECTO
+                    hitDuck.state = 'FALLING';
+                    createExplosion(hitDuck.x, hitDuck.y, true);
+                    playHit();
+                    gameState = 'RESULT';
+                    
+                    // Desaparecer otros patos
+                    ducks.forEach(d => { if(d !== hitDuck) d.state = 'DEAD' });
+
+                    UI.stampS.classList.remove('stamp-animate');
+                    void UI.stampS.offsetWidth; // Reflow
+                    UI.stampS.classList.add('stamp-animate');
+
+                    setTimeout(() => {
+                        currentQ++;
+                        spawnQuestion();
+                    }, 2000);
+
+                } else {
+                    // INCORRECTO
+                    createExplosion(hitDuck.x, hitDuck.y, false);
+                    hitDuck.state = 'DEAD'; // Desaparece en explosión
+                    playFailMock();
+                    lives--;
+                    updateHUD();
+                    gameState = 'RESULT';
+                    
+                    UI.stampF.classList.remove('stamp-animate');
+                    void UI.stampF.offsetWidth;
+                    UI.stampF.classList.add('stamp-animate');
+
+                    if (lives <= 0) {
+                        setTimeout(loseGame, 2000);
+                    } else {
+                        setTimeout(() => {
+                            spawnQuestion(); // Reintentar misma pregunta
+                        }, 2500);
+                    }
+                }
+            }
+        }
+
+        // Eventos de ratón y táctil unidos para disparar
+        container.addEventListener('mousedown', handleShot);
+        container.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Evita scroll
+            handleShot(e);
+        }, {passive: false});
+
+
+        let lastTime = 0;
+        function loop(time) {
+            requestAnimationFrame(loop);
+            
+            ctx.clearRect(0, 0, w, h);
+            drawEnvironment();
+
+            // Actualizar y dibujar entidades
+            for (let i = ducks.length - 1; i >= 0; i--) {
+                let d = ducks[i];
+                if (d.state !== 'DEAD') {
+                    d.update();
+                    d.draw(ctx);
+                }
+                // Si cae fuera de pantalla, marcar muerto
+                if (d.y > h + 50) d.state = 'DEAD';
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw(ctx);
+                if (particles[i].life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        async function startGame() {
+            await initAudio();
+            Tone.Transport.start();
+            bgmLoop.start(0);
+
+            UI.start.classList.add('hidden');
+            UI.gameover.classList.add('hidden');
+            UI.victory.classList.add('hidden');
+            UI.scoreboard.classList.remove('hidden');
+            
+            currentQ = 0;
+            lives = 3;
+            ducks = [];
+            particles = [];
+            
+            updateHUD();
+            
+            // Pequeña pausa dramática antes de la primera pregunta
+            setTimeout(spawnQuestion, 1000);
+        }
+
+        function loseGame() {
+            bgmLoop.stop();
+            UI.qBlock.classList.add('hidden');
+            UI.scoreboard.classList.add('hidden');
+            UI.gameover.classList.remove('hidden');
+            UI.gameover.classList.add('fade-in');
+        }
+
+        function winGame() {
+            bgmLoop.stop();
+            playWin();
+            UI.qBlock.classList.add('hidden');
+            UI.scoreboard.classList.add('hidden');
+            UI.victory.classList.remove('hidden');
+            UI.victory.classList.add('fade-in');
+        }
+
+        UI.start.querySelector('button').addEventListener('click', startGame);
+        document.getElementById('btnRestart').addEventListener('click', startGame);
+        document.getElementById('btnVictory').addEventListener('click', () => {
+            UI.victory.classList.add('hidden');
+            UI.start.classList.remove('hidden');
+            gameState = 'MENU';
+        });
+
+        // Iniciar loop visual
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
